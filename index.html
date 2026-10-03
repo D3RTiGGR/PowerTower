@@ -713,7 +713,7 @@
         </div>
 
         <div class="task-card">
-            <div class="task-category-tag" id="task-cat-tag">Rad des Zufalls 👁️</div>
+            <div class="task-category-tag" id="task-cat-tag">Rad des Zufalls 👁️️</div>
             <div class="task-title-text" id="task-title">Deine Aufgabe</div>
             <div class="task-body-text" id="task-desc">Lade eine Aufgabe...</div>
             
@@ -744,6 +744,19 @@
                 </div>
                 <div class="interactive-result-text" id="reaction-result"></div>
                 <button class="btn-main" id="reaction-btn" onclick="startReactionGame()">START ⚡</button>
+            </div>
+
+            <!-- Gyroscope Incline Estimator Container -->
+            <div class="interactive-wrapper" id="gyro-area" style="display: none;">
+                <div class="timer-box" id="gyro-box">
+                    <div class="timer-status-hint" id="gyro-status-hint">GYRO-SENSOR BEREIT</div>
+                    <div class="timer-display-text" id="gyro-display">📐 --°</div>
+                </div>
+                <div class="rules-notice" id="gyro-permission-box" style="display: none; text-align: left; width: 100%;">
+                    <strong>Sensor-Hinweis:</strong> iOS 13+ erfordert Erlaubnis. HTTPS ist zwingend erforderlich. Falls dein Gerät keinen Sensor hat, kannst du die Berechtigung hier aktivieren.
+                </div>
+                <div class="interactive-result-text" id="gyro-result"></div>
+                <button class="btn-main" id="gyro-btn" onclick="evaluateGyroscope()">Bestätigen 📐</button>
             </div>
 
             <!-- Wheel of Fortune Container -->
@@ -825,6 +838,10 @@
         let reactionTimeout = null;
         let reactionStartTime = 0;
 
+        let gyroTargetAngle = 45;
+        let currentBetaValue = 0;
+        let gyroActive = false;
+
         let wheelSpinning = false;
         let wheelCurrentAngle = 0;
         const wheelSegmentsDE = ["Trinken & Stapeln", "Nachbar trinkt", "Alle trinken", "Kein Schnaps für Dich"];
@@ -857,6 +874,22 @@
                 }
             ],
             estimation: [
+                {
+                    isGyroGame: true,
+                    getTaskText: function(targetAngle, lang) {
+                        if (lang === 'de') {
+                            return {
+                                title: `Neigungswinkel-Schätzer (${targetAngle}°) 📐`,
+                                desc: `Halte das Smartphone blind in einem ${targetAngle}-Grad-Winkel nach vorne geneigt und drücke mit dem Daumen Bestätigen! (Toleranz: ±5°).`
+                            };
+                        } else {
+                            return {
+                                title: `Incline Estimator (${targetAngle}°) 📐`,
+                                desc: `Hold your phone blind at a ${targetAngle}-degree forward tilt and tap Confirm with your thumb! (Tolerance: ±5°).`
+                            };
+                        }
+                    }
+                },
                 {
                     isBlindTimer: true,
                     timerMode: 'estimation',
@@ -953,13 +986,17 @@
 
         const categoryLabels = {
             action: { de: "Aktion 🖐️", en: "Action 🖐️" },
-            estimation: { de: "Ich schätze... ⏱️", en: "I guess... ⏱️" },
+            estimation: { de: "Ich schätze... ⏱️️", en: "I guess... ⏱️" },
             gambling: { de: "Glücksspiel 🍀", en: "Gambling 🍀" },
             wheel: { de: "Rad des Zufalls 👁️", en: "Wheel of Fortune 👁️" }
         };
 
         function getRandomTargetTime() {
             return Math.floor(Math.random() * (33 - 19 + 1)) + 19;
+        }
+
+        function getRandomGyroTarget() {
+            return Math.floor(Math.random() * (160 - 5 + 1)) + 5;
         }
 
         function setLanguage(lang) {
@@ -1016,7 +1053,7 @@
 
                 document.getElementById('custom-modal-title').innerText = "Eigene Aufgabe hinzufügen ✏️";
                 document.getElementById('custom-cat-label').innerText = "Kategorie wählen:";
-                document.getElementById('opt-action').innerText = "Aktion 🖐️️";
+                document.getElementById('opt-action').innerText = "Aktion 🖐";
                 document.getElementById('opt-gambling').innerText = "Glücksspiel 🍀";
                 document.getElementById('custom-input-title').placeholder = "Titel der Aufgabe";
                 document.getElementById('custom-input-desc').placeholder = "Beschreibung...";
@@ -1109,6 +1146,7 @@
         function goToPage(pageId) {
             if (timerInterval) clearInterval(timerInterval);
             if (reactionTimeout) clearTimeout(reactionTimeout);
+            stopGyroscope();
 
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             let target = typeof pageId === 'number' ? 'page-' + pageId : (pageId.startsWith('page-') ? pageId : 'page-' + pageId);
@@ -1139,14 +1177,24 @@
             const timerArea = document.getElementById('timer-area');
             const coinArea = document.getElementById('coin-area');
             const reactionArea = document.getElementById('reaction-area');
+            const gyroArea = document.getElementById('gyro-area');
             const wheelArea = document.getElementById('wheel-area');
 
             timerArea.style.display = 'none';
             coinArea.style.display = 'none';
             reactionArea.style.display = 'none';
+            gyroArea.style.display = 'none';
             wheelArea.style.display = 'none';
 
-            if (selectedTask.isBlindTimer) {
+            if (selectedTask.isGyroGame) {
+                gyroArea.style.display = 'flex';
+                gyroTargetAngle = getRandomGyroTarget();
+                const content = selectedTask.getTaskText(gyroTargetAngle, currentLang);
+                document.getElementById('task-title').innerText = content.title;
+                document.getElementById('task-desc').innerText = content.desc;
+                resetGyroUI();
+                initGyroscope();
+            } else if (selectedTask.isBlindTimer) {
                 timerArea.style.display = 'flex';
                 const randomTarget = getRandomTargetTime();
                 const content = selectedTask.getTaskText(randomTarget, currentLang);
@@ -1178,6 +1226,116 @@
             }
 
             goToPage('4');
+        }
+
+        function resetGyroUI() {
+            gyroActive = true;
+            currentBetaValue = 0;
+            const box = document.getElementById('gyro-box');
+            box.className = 'timer-box';
+            document.getElementById('gyro-status-hint').innerText = currentLang === 'de' ? 'GYROSENSOR AKTIV' : 'GYRO ACTIVE';
+            document.getElementById('gyro-display').innerText = '📐 --°';
+            document.getElementById('gyro-result').innerText = '';
+            document.getElementById('gyro-permission-box').style.display = 'none';
+            const btn = document.getElementById('gyro-btn');
+            btn.innerText = currentLang === 'de' ? 'BESTÄTIGEN 📐' : 'CONFIRM 📐';
+            btn.style.background = 'linear-gradient(90deg, #ff6600, #ff0055)';
+            btn.disabled = false;
+        }
+
+        function handleOrientation(event) {
+            if (!gyroActive) return;
+            // event.beta represents motion around the x-axis (front-to-back tilt in degrees, typically -180 to 180)
+            if (event.beta !== null) {
+                currentBetaValue = Math.round(event.beta);
+                const display = document.getElementById('gyro-display');
+                if (display && gyroActive) {
+                    display.innerText = `📐 ${currentBetaValue}°`;
+                }
+            }
+        }
+
+        function initGyroscope() {
+            if (typeof window === 'undefined') return;
+
+            // Handle iOS 13+ permission request
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            showGyroPermissionWarning();
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Gyroscope permission error:', err);
+                        showGyroPermissionWarning();
+                    });
+            } else if ('DeviceOrientationEvent' in window) {
+                window.addEventListener('deviceorientation', handleOrientation);
+            } else {
+                showGyroPermissionWarning();
+            }
+        }
+
+        function showGyroPermissionWarning() {
+            const permBox = document.getElementById('gyro-permission-box');
+            if (permBox) {
+                permBox.style.display = 'block';
+                permBox.innerHTML = currentLang === 'de' 
+                    ? '<strong>Sensor-Hinweis:</strong> Kein Gyrosensor gefunden oder Berechtigung verweigert. Stelle sicher, dass HTTPS aktiv ist und Erlaubnis erteilt wurde.'
+                    : '<strong>Sensor Notice:</strong> No gyroscope detected or permission denied. Ensure HTTPS is used and permission is granted.';
+            }
+        }
+
+        function stopGyroscope() {
+            gyroActive = false;
+            window.removeEventListener('deviceorientation', handleOrientation);
+        }
+
+        function evaluateGyroscope() {
+            if (!gyroActive) return;
+            gyroActive = false;
+            window.removeEventListener('deviceorientation', handleOrientation);
+
+            const measuredAngle = Math.abs(currentBetaValue);
+            const diff = Math.abs(measuredAngle - gyroTargetAngle);
+            const passed = diff <= 5;
+
+            const box = document.getElementById('gyro-box');
+            const hint = document.getElementById('gyro-status-hint');
+            const display = document.getElementById('gyro-display');
+            const resultText = document.getElementById('gyro-result');
+            const btn = document.getElementById('gyro-btn');
+
+            display.className = 'timer-display-text reveal-anim';
+            setTimeout(() => display.classList.remove('reveal-anim'), 400);
+            display.innerText = `📐 ${measuredAngle}°`;
+
+            if (passed) {
+                box.className = 'timer-box win';
+                hint.innerText = currentLang === 'de' ? 'BESTANDEN! 🎉' : 'PASSED! 🎉';
+                resultText.innerHTML = currentLang === 'de'
+                    ? `<span style="color:#00ff88;">Ziel war ${gyroTargetAngle}° (Abweichung: ${diff}°).<br>Du hieltst es auf ${measuredAngle}° – Bestanden! Trinken & stapeln! 🥂</span>`
+                    : `<span style="color:#00ff88;">Target was ${gyroTargetAngle}° (Diff: ${diff}°).<br>You held it at ${measuredAngle}° – Passed! Drink & stack! 🥂</span>`;
+            } else {
+                box.className = 'timer-box lose';
+                hint.innerText = currentLang === 'de' ? 'LEIDER DANEBEN! ❌' : 'TOO FAR OFF! ❌';
+                resultText.innerHTML = currentLang === 'de'
+                    ? `<span style="color:#ff3366;">Ziel war ${gyroTargetAngle}°.<br>Du hieltst es auf ${measuredAngle}° – ${diff}° Abweichung! Sorry für dich gibt es kein Schnaps. 🛑</span>`
+                    : `<span style="color:#ff3366;">Target was ${gyroTargetAngle}°.<br>You held it at ${measuredAngle}° – ${diff}° deviation! Sorry für dich gibt es kein Schnaps. 🛑</span>`;
+            }
+
+            btn.innerText = currentLang === 'de' ? 'ERNEUT VERSUCHEN 🔄' : 'TRY AGAIN 🔄';
+            btn.style.background = 'linear-gradient(90deg, #ff6600, #ff0055)';
+            
+            // Allow retry
+            btn.onclick = function() {
+                resetGyroUI();
+                initGyroscope();
+                btn.onclick = evaluateGyroscope;
+            };
         }
 
         function performCoinFlip() {
@@ -1403,7 +1561,7 @@
                             : `<span style="color:#00ff88;">Great job! ${formattedRemaining} left.<br>Drink & stack! 🥂</span>`;
                     } else if (remainingSeconds > 5.0) {
                         box.className = 'timer-box lose';
-                        hint.innerText = currentLang === 'de' ? 'ZU FRÜH ENTSCHÄRFT! ⚠️' : 'TOO EARLY! ⚠️️';
+                        hint.innerText = currentLang === 'de' ? 'ZU FRÜH ENTSCHÄRFT! ⚠️' : 'TOO EARLY! ⚠';
                         resultText.innerHTML = currentLang === 'de' 
                             ? `<span style="color:#ffcc00;">Noch ${formattedRemaining} Restzeit (Ziel: 0-5s).<br>Der Zünder war noch aktiv! Sorry für dich gibt es kein Schnaps.! 🛑</span>` 
                             : `<span style="color:#ffcc00;">${formattedRemaining} left (Target: 0-5s).<br>Sorry für dich gibt es kein Schnaps.! 🛑</span>`;
