@@ -713,7 +713,7 @@
         </div>
 
         <div class="task-card">
-            <div class="task-category-tag" id="task-cat-tag">Rad des Zufalls 👁️️</div>
+            <div class="task-category-tag" id="task-cat-tag">Rad des Zufalls 👁</div>
             <div class="task-title-text" id="task-title">Deine Aufgabe</div>
             <div class="task-body-text" id="task-desc">Lade eine Aufgabe...</div>
             
@@ -986,7 +986,7 @@
 
         const categoryLabels = {
             action: { de: "Aktion 🖐️", en: "Action 🖐️" },
-            estimation: { de: "Ich schätze... ⏱️️", en: "I guess... ⏱️" },
+            estimation: { de: "Ich schätze... ⏱", en: "I guess... ⏱️" },
             gambling: { de: "Glücksspiel 🍀", en: "Gambling 🍀" },
             wheel: { de: "Rad des Zufalls 👁️", en: "Wheel of Fortune 👁️" }
         };
@@ -1245,7 +1245,6 @@
 
         function handleOrientation(event) {
             if (!gyroActive) return;
-            // event.beta represents motion around the x-axis (front-to-back tilt in degrees, typically -180 to 180)
             if (event.beta !== null) {
                 currentBetaValue = Math.round(event.beta);
                 const display = document.getElementById('gyro-display');
@@ -1258,7 +1257,7 @@
         function initGyroscope() {
             if (typeof window === 'undefined') return;
 
-            // Handle iOS 13+ permission request
+            // iOS 13+ Berechtigungsanfrage direkt im Kontext auslösen
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
                     .then(response => {
@@ -1330,7 +1329,6 @@
             btn.innerText = currentLang === 'de' ? 'ERNEUT VERSUCHEN 🔄' : 'TRY AGAIN 🔄';
             btn.style.background = 'linear-gradient(90deg, #ff6600, #ff0055)';
             
-            // Allow retry
             btn.onclick = function() {
                 resetGyroUI();
                 initGyroscope();
